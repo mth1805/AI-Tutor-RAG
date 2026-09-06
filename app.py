@@ -10,6 +10,7 @@ import os
 import google.generativeai as genai
 import docx
 import base64
+import time 
 
 import asyncio
 try:
@@ -42,9 +43,37 @@ def get_text_chunks(text):
 
 def get_vector_store(text_chunks):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-2")
-    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+    
+    # BATCHING
+    
+    # 1. Khởi tạo thanh tiến trình (Progress Bar) trên UI
+    progress_text = f"Đang mã hóa {len(text_chunks)} đoạn văn bản ..."
+    my_bar = st.progress(0, text=progress_text)
+    
+    # 2. Kích thước mỗi Batch
+    batch_size = 50 # Xử lý 50 đoạn mỗi lần gửi
+    
+    # 3. Khởi tạo kho Vector với lô đầu tiên
+    vector_store = FAISS.from_texts(text_chunks[:batch_size], embedding=embeddings)
+    
+    # 4. Vòng lặp xử lý các lô còn lại với
+    for i in range(batch_size, len(text_chunks), batch_size):
+        batch = text_chunks[i : i + batch_size]
+        
+        # Cho hệ thống ngủ 8 giây
+        time.sleep(8) 
+        
+        # Nhúng lô tiếp theo vào kho chứa
+        vector_store.add_texts(batch)
+        
+        # Tính toán % hoàn thành và cập nhật thanh tiến trình
+        percent_complete = min((i + batch_size) / len(text_chunks), 1.0)
+        my_bar.progress(percent_complete, text=progress_text)
+        
+    # 5. Lưu kho vector và dọn dẹp giao diện
     vector_store.save_local("faiss_index")
-
+    my_bar.empty() # Ẩn thanh tiến trình khi hoàn tất
+    
 def get_conversational_chain():
     prompt_template = """
     Bạn là một Gia sư AI tận tâm dành cho sinh viên đại học. 
